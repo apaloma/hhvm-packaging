@@ -50,7 +50,7 @@ if [ "$NIGHTLY" = true ]; then
     echo "You are using the wrong branch of the packaging script."
     exit 1
 else
-    GIT_TARGET=HHVM-$HHVM_VERSION
+    GIT_TARGET=HHVM-$HHVM_VERSION-fixed
     PACKAGE_VERSION=`echo $VERSION | sed -E 's/-(dbg|dev)$//'`~$RELEASE
     case $STABLE_VERSION in
         3.9)
@@ -80,7 +80,7 @@ fi
 
 cd $SOURCE
 if [ ! -d $SOURCE/.git ]; then
-    git clone https://github.com/facebook/hhvm.git $SOURCE
+    git clone https://github.com/apaloma/hhvm.git $SOURCE
     git checkout $GIT_TARGET
    
     if [ "$NIGHTLY" = true ]; then
@@ -220,32 +220,23 @@ if [ ! -d $PACKAGE/root ]; then
       cp -L /usr/lib/hhvm/libjemalloc.so.1 $PACKAGE/root/usr/lib/hhvm/
     fi
 
-    if [ "$NIGHTLY" = true ]; then
-        perl -pi -e "s/Conflicts: .*\n//" $PACKAGE/root/DEBIAN/control
-        perl -pi -e "s/Provides: .*\n//" $PACKAGE/root/DEBIAN/control
-        perl -pi -e "s/Replaces: .*\n//" $PACKAGE/root/DEBIAN/control
-        perl -pi -e "s/Version:.*/Version: $PACKAGE_VERSION/" $PACKAGE/root/DEBIAN/control
-        if [ "$DEBUG" = true ]; then
-            perl -pi -e "s/Package: hhvm/Package: hhvm-nightly-dbg\nConflicts: hhvm, hhvm-nightly, hhvm-dbg\nProvides: hhvm\nReplaces: hhvm, hhvm-nightly, hhvm-dbg/" $PACKAGE/root/DEBIAN/control
-        else
-            perl -pi -e "s/Package: hhvm/Package: hhvm-nightly\nConflicts: hhvm, hhvm-dbg\nProvides: hhvm\nReplaces: hhvm, hhvm-dbg/" $PACKAGE/root/DEBIAN/control
-        fi
+    perl -pi -e "s/Conflicts: .*\n//" $PACKAGE/root/DEBIAN/control
+    perl -pi -e "s/Provides: .*\n//" $PACKAGE/root/DEBIAN/control
+    perl -pi -e "s/Replaces: .*\n//" $PACKAGE/root/DEBIAN/control
+    perl -pi -e "s/Version:.*/Version: $PACKAGE_VERSION/" $PACKAGE/root/DEBIAN/control
+    if [ "$DEBUG" = true ]; then
+        perl -pi -e "s/Package: hhvm/Package: hhvm-custom-dbg\nConflicts: hhvm, hhvm-nightly, hhvm-custom, hhvm-dbg\nProvides: hhvm\nReplaces: hhvm, hhvm-nightly, hhvm-nightly-dbg, hhvm-custom, hhvm-dbg/" $PACKAGE/root/DEBIAN/control
     else
-        if [ "$DEBUG" = true ]; then
-            perl -pi -e "s/Conflicts: .*\n//" $PACKAGE/root/DEBIAN/control
-            perl -pi -e "s/Provides: .*\n//" $PACKAGE/root/DEBIAN/control
-            perl -pi -e "s/Replaces: .*\n//" $PACKAGE/root/DEBIAN/control
-            perl -pi -e "s/Package: hhvm/Package: hhvm-dbg\nConflicts: hhvm\nProvides: hhvm\nReplaces: hhvm/" $PACKAGE/root/DEBIAN/control
-        fi
-        perl -pi -e "s/Version:.*/Version: $PACKAGE_VERSION/" $PACKAGE/root/DEBIAN/control
+        perl -pi -e "s/Package: hhvm/Package: hhvm-custom\nConflicts: hhvm, hhvm-dbg, hhvm-nightly, hhvm-nightly-dbg\nProvides: hhvm\nReplaces: hhvm, hhvm-dbg, hhvm-nightly, hhvm-nightly-dbg/" $PACKAGE/root/DEBIAN/control
     fi
+
     fakeroot -s $FAKEROOT chown -R root:root $PACKAGE/root
     fakeroot -s $FAKEROOT -i $FAKEROOT chown -R www-data:www-data $PACKAGE/root/var/log/hhvm/
     echo "finished creating hhvm package contents"
 fi
 
 fakeroot -i $FAKEROOT dpkg -b $PACKAGE/root/ hhvm_${PACKAGE_VERSION}_amd64.deb
-dpkg-sig -k 452A652F --sign builder $PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb
+#dpkg-sig -k 452A652F --sign builder $PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb
 
 if [ -z "$DPACKAGE" -o ! -d "$DPACKAGE" ]; then
     DPACKAGE=`mktemp -d`
@@ -276,25 +267,24 @@ if [ "$DEBUG" = false ]; then
         cp -r $BUILD/usr/bin/hphpize $DPACKAGE/root/usr/bin/
         chmod 755 $DPACKAGE/root/usr/bin/hphpize
         perl -pi -e "s/Version:.*/Version: $PACKAGE_VERSION/" $DPACKAGE/root/DEBIAN/control
-        if [ "$NIGHTLY" = true ]; then
-            perl -pi -e "s/Package: hhvm-dev/Package: hhvm-dev-nightly\nConflicts: hhvm-dev\nProvides: hhvm-dev\nReplaces: hhvm-dev/" $DPACKAGE/root/DEBIAN/control
-        fi
+        perl -pi -e "s/Package: hhvm-dev/Package: hhvm-dev-custom\nConflicts: hhvm-dev, hhvm-dev-nightly\nProvides: hhvm-dev\nReplaces: hhvm-dev,hhvm-dev-nightly/" $DPACKAGE/root/DEBIAN/control
         fakeroot -s $FAKEROOT chown -R root:root $DPACKAGE/root
         echo "finished creating dev package contents"
     fi
 
     fakeroot -i $FAKEROOT dpkg -b $DPACKAGE/root/ hhvm_dev_${PACKAGE_VERSION}_amd64.deb
-    dpkg-sig -k 452A652F --sign builder $DPACKAGE/hhvm_dev_${PACKAGE_VERSION}_amd64.deb
+    #dpkg-sig -k 452A652F --sign builder $DPACKAGE/hhvm_dev_${PACKAGE_VERSION}_amd64.deb
 fi
 
-SSH_KEY=$HOME/.ssh/id_rsa_phraseless
+if false; then
+#SSH_KEY=$HOME/.ssh/id_rsa_phraseless
 STAGING=/var/tmp/staging/$DISTRO_NAME/
-RSYNC_HOST=ftp.osuosl.org
+#RSYNC_HOST=ftp.osuosl.org
 
 mkdir -p $STAGING
-rsync --delete -av -e "ssh -i $SSH_KEY" hiphop@$RSYNC_HOST:data/$DISTRO_NAME/ $STAGING || true
+#rsync --delete -av -e "ssh -i $SSH_KEY" hiphop@$RSYNC_HOST:data/$DISTRO_NAME/ $STAGING || true
 # do it twice since it takes so long something else might have pushed
-rsync --delete -av -e "ssh -i $SSH_KEY" hiphop@$RSYNC_HOST:data/$DISTRO_NAME/ $STAGING
+#rsync --delete -av -e "ssh -i $SSH_KEY" hiphop@$RSYNC_HOST:data/$DISTRO_NAME/ $STAGING
 
 REPREPRO="reprepro --keepunreferencedfiles --keepunusednewfiles includedeb"
 
@@ -341,13 +331,8 @@ fi
 
 rsync $RSYNC_OPTS -av -e "ssh -i $SSH_KEY" $STAGING hiphop@$RSYNC_HOST:data/$DISTRO_NAME/
 ssh -i $SSH_KEY hiphop@$RSYNC_HOST "/home/hiphop/trigger-hiphop"
+fi
 
 # cleanup
-rm -rf $HEADERS $SOURCE
-rm -rf $PACKAGE $BUILD $DPACKAGE
-
-if [ "$NIGHTLY" = true -a "$DEBUG" = false ]; then
-    echo "Pinging FB build tracker"
-    curl "https://our.intern.facebook.com/intern/hhvm/ossbuildping/?distro=$RELEASE"
-    echo
-fi
+#rm -rf $HEADERS $SOURCE
+#rm -rf $PACKAGE $BUILD $DPACKAGE
